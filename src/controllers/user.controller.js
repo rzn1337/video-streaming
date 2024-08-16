@@ -52,7 +52,7 @@ const registerUser = asyncHandler(async (req, res) => {
         Array.isArray(req.files.coverImage) &&
         req.files.coverImage.length > 0
     ) {
-        req.files.coverImage[0].path;
+        coverImageLocalPath = req.files.coverImage[0].path;
     }
 
     if (!avatarLocalPath) {
@@ -94,15 +94,19 @@ const registerUser = asyncHandler(async (req, res) => {
 const loginUser = asyncHandler(async (req, res) => {
     const { email, username, password } = req.body;
 
-    if (!email || !username) {
+    console.log(req.body)
+
+    if (!email && !username) {
         throw new ApiError(400, "Username or password is required");
     }
 
     const user = await User.findOne({
-        $or: [{ email: email, username: username }],
-    }).select("-password -refreshToken");
+        $or: [{username}, {email}],
+    })
 
-    if (!existingUser) {
+    console.log(user)
+
+    if (!user) {
         throw new ApiError(404, "User does not exist");
     }
 
@@ -121,6 +125,8 @@ const loginUser = asyncHandler(async (req, res) => {
         secure: true,
     };
 
+    const loggedInUser = await User.findById(user._id).select("-password -refreshToken")
+
     return res
         .status(200)
         .cookie("accessToken", accessToken, options)
@@ -129,7 +135,7 @@ const loginUser = asyncHandler(async (req, res) => {
             new ApiResponse(
                 200,
                 {
-                    user: user,
+                    user: loggedInUser,
                     refreshToken: refreshToken,
                     accessToken: accessToken,
                 },
@@ -139,7 +145,8 @@ const loginUser = asyncHandler(async (req, res) => {
 });
 
 const logoutUser = asyncHandler(async (req, res) => {
-    const { user } = req.user;
+    const { user } = req;
+    console.log(req.user._id)
     await User.findByIdAndUpdate(
         user._id,
         {
