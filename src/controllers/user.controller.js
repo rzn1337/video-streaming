@@ -233,7 +233,8 @@ const changeCurrentPassword = asyncHandler(async (req, res) => {
     }
 
     user.password = newPassword;
-    await user.save({ validateBeforeSave: false });
+    await user.save({ validateBeforeSave: false }); // user is of the type mongoose document, User is of type mongoose model 
+
 
     return res
         .status(200)
