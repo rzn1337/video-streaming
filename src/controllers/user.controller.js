@@ -23,6 +23,8 @@ const generateAccessAndRefreshTokens = async (userId) => {
 const registerUser = asyncHandler(async (req, res) => {
     const { fullName, email, username, password } = req.body;
 
+    // console.log("password: ", this.password)
+
     if (
         [fullName, email, username, password].some(
             (field) => field?.trim() === ""
@@ -41,8 +43,6 @@ const registerUser = asyncHandler(async (req, res) => {
             "A user with this username or email already exists"
         );
     }
-
-    console.log(req);
 
     const avatarLocalPath = req.files?.avatar[0]?.path;
     // const coverImageLocalPath = req.files?.coverImage[0]?.path;
@@ -75,6 +75,8 @@ const registerUser = asyncHandler(async (req, res) => {
         password,
         username: username.toLowerCase(),
     });
+
+    // console.log("passwordafter: ", this.password)
 
     const createdUser = await User.findById(user._id).select(
         "-password -refreshToken"
@@ -225,7 +227,7 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
 const changeCurrentPassword = asyncHandler(async (req, res) => {
     const { oldPassword, newPassword } = req.body;
 
-    const user = await User.findById(req.user?._id);  // user is the mongoose document added in the request by the middleware verifyjwt
+    const user = await User.findById(req.user?._id); // user is the mongoose document added in the request by the middleware verifyjwt
     const isPasswordCorrect = await user.isPasswordCorrect(oldPassword);
 
     if (!isPasswordCorrect) {
@@ -233,8 +235,7 @@ const changeCurrentPassword = asyncHandler(async (req, res) => {
     }
 
     user.password = newPassword;
-    await user.save({ validateBeforeSave: false }); // user is of the type mongoose document, User is of type mongoose model 
-
+    await user.save({ validateBeforeSave: false }); // user is of the type mongoose document, User is of type mongoose model
 
     return res
         .status(200)
@@ -350,6 +351,86 @@ const updateUserCoverImage = asyncHandler(async (req, res) => {
         );
 });
 
+const getUserChannelProfile = asyncHandler(async (req, res) => {
+    const { username } = req.params;
+
+    if (!username?.trim()) {
+        throw new ApiError(400, "Username is missing");
+    }
+
+    const channel = await User.aggregate([
+        {
+            $match: {
+                username: username?.toLowerCase(), // not really necessary as usernames are unique
+            },
+        },
+        {
+            $lookup: {
+                from: "subscriptions",
+                localField: "_id",
+                foreignField: "channel",
+                as: "subscribers",
+            },
+        },
+        {
+            $lookup: {
+                from: "subscriptions",
+                localField: "_id",
+                foreignField: "subscriber",
+                as: "subscribedTo",
+            },
+        },
+        {
+            $addFields: {
+                subscriberCount: {
+                    $size: "$subscribers",
+                },
+                subscribedToCount: {
+                    $size: "$subscribedTo",
+                },
+                isSubscribed: {
+                    $condition: {
+                        if: {
+                            $in: [req.user?._id, "$subscribers.subscriber"],
+                        },
+                        then: true,
+                        else: false,
+                    },
+                },
+            },
+        },
+        {
+            $project: {
+                fullName: 1,
+                username: 1,
+                subscriberCount: 1,
+                subscribedToCount: 1,
+                isSubscribed: 1,
+                avatar: 1,
+                coverImage: 1,
+                email: 1,
+                createdAt: 1,
+            },
+        },
+    ]);
+
+    console.log(channel);
+
+    if (!channel?.length) {
+        throw new ApiError(404, "Channel does not exist");
+    }
+
+    return res
+        .status(200)
+        .json(
+            new ApiResponse(
+                200,
+                channel[0],
+                "User channel fetched successfully"
+            )
+        );
+});
+
 export {
     registerUser,
     loginUser,
@@ -360,4 +441,5 @@ export {
     updateAccountDetails,
     updateUserAvatar,
     updateUserCoverImage,
+    getUserChannelProfile,
 };
